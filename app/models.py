@@ -23,16 +23,21 @@ class User(UserMixin, db.Model):
 
 
     '''
-    User实例关联到其他User实例，按照惯例，左侧用户关注右侧用户，左侧 follower_id 为粉丝，右侧 followed_id 为被关注人
+    User实例关联到其他User实例
     
     'User'是关系当中的右侧实体（将左侧实体看成是上级类）。由于这是自引用关系，所以我不得不在两侧都使用同一个实体。
+    
     secondary 指定了用于该关系的关联表，就是使用我在上面定义的followers。
     
-    primaryjoin 指明了通过关系表关联到左侧实体（关注者）的条件 。关系中的左侧的join条件是关系表中的follower_id字段与这个关注者的用户ID匹配。
+    primaryjoin 指明了通过关系表关联到左侧实体（关注者）的条件 。
+    关系中的左侧的join条件是关系表中的follower_id字段与这个关注者的用户ID匹配。
     followers.c.follower_id表达式引用了该关系表中的follower_id列。
     
     secondaryjoin 指明了通过关系表关联到右侧实体（被关注者）的条件 。 
     这个条件与primaryjoin类似，唯一的区别在于，现在我使用关系表的字段的是followed_id了。
+    
+    
+    譬如：我关注李安，follower_id是我的id，followed_id是李安的id
     
     backref定义了右侧实体如何访问该关系。在左侧，关系被命名为followed，所以在右侧我将使用followers来表示所有左侧用户的列表，即粉丝列表。
     附加的lazy参数表示这个查询的执行模式，设置为动态模式的查询不会立即执行，直到被调用，这也是我设置用户动态一对多的关系的方式。
@@ -42,7 +47,7 @@ class User(UserMixin, db.Model):
     '''
 
     followed = db.relationship(
-        'User',secondary=followers,
+        'User',secondary=followers,             #上面定义的followers表
         primaryjoin = (followers.c.follower_id==id),
         secondaryjoin=(followers.c.followed_id==id),
         backref = db.backref('followers',lazy='dynamic'),lazy='dynamic'
@@ -60,6 +65,16 @@ class User(UserMixin, db.Model):
     # is_following()方法发出一个关于followed关系的查询来检查两个用户之间的关系是否已经存在。
     def is_following(self,user):
         return self.followed.filter(followers.c.followed_id==user.id).count()>0
+
+
+    #查看我关注的人的动态
+    def followed_posts(self):
+        followed = Post.query.join(
+            followers,(followers.c.followed_id == Post.user_id)).filter(
+                followers.c.follower_id ==self.id)
+        own =Post.query.filter_by(user_id=self.id)
+        return followed.union(own).order_by(Post.timestamp.desc())
+
 
     '''
     db.relationship字段通常在“一”的这边定义，并用作访问“多”的快捷方式
